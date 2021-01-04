@@ -121,6 +121,15 @@ int ieee802_11_send_wnmsleep_req(struct wpa_supplicant *wpa_s,
 			os_free(wnmtfs_ie);
 			return -1;
 		}
+#ifdef CONFIG_TESTING_OPTIONS
+		if (wpa_s->oci_freq_override_wnm_sleep) {
+			wpa_printf(MSG_INFO,
+				   "TEST: Override OCI KDE frequency %d -> %d MHz",
+				   ci.frequency,
+				   wpa_s->oci_freq_override_wnm_sleep);
+			ci.frequency = wpa_s->oci_freq_override_wnm_sleep;
+		}
+#endif /* CONFIG_TESTING_OPTIONS */
 
 		oci_ie_len = OCV_OCI_EXTENDED_LEN;
 		oci_ie = os_zalloc(oci_ie_len);
@@ -374,8 +383,9 @@ static void ieee802_11_rx_wnmsleep_resp(struct wpa_supplicant *wpa_s,
 
 		if (ocv_verify_tx_params(oci_ie, oci_ie_len, &ci,
 					 channel_width_to_int(ci.chanwidth),
-					 ci.seg1_idx) != 0) {
-			wpa_msg(wpa_s, MSG_WARNING, "WNM: %s", ocv_errorstr);
+					 ci.seg1_idx) != OCI_SUCCESS) {
+			wpa_msg(wpa_s, MSG_WARNING, "WNM: OCV failed: %s",
+				ocv_errorstr);
 			return;
 		}
 	}
@@ -1451,6 +1461,22 @@ static void ieee802_11_rx_bss_trans_mgmt_req(struct wpa_supplicant *wpa_s,
 			wpa_s->wnm_dissoc_timer * beacon_int * 128 / 125, url);
 	}
 
+#ifdef CONFIG_MBO
+	vendor = get_ie(pos, end - pos, WLAN_EID_VENDOR_SPECIFIC);
+	if (vendor) {
+		wpas_mbo_ie_trans_req(wpa_s, vendor + 2, vendor[1]);
+		if (wpa_s->conf->btm_offload) {
+			wpa_msg(wpa_s, MSG_INFO,
+				"WNM: Notify BSS Transition Management Request frame status");
+			wpa_s->bss_tm_status = WNM_BSS_TM_ACCEPT;
+			wpas_notify_bss_tm_status(wpa_s);
+			/* since it could be referenced in the scan result logic, initialize it */
+			wpa_s->wnm_mbo_trans_reason_present = 0;
+			return;
+		}
+	}
+#endif /* CONFIG_MBO */
+
 	if (wpa_s->wnm_mode & WNM_BSS_TM_REQ_DISASSOC_IMMINENT) {
 		wpa_msg(wpa_s, MSG_INFO, "WNM: Disassociation Imminent - "
 			"Disassociation Timer %u", wpa_s->wnm_dissoc_timer);
@@ -1461,12 +1487,6 @@ static void ieee802_11_rx_bss_trans_mgmt_req(struct wpa_supplicant *wpa_s,
 			wpa_supplicant_req_scan(wpa_s, 0, 0);
 		}
 	}
-
-#ifdef CONFIG_MBO
-	vendor = get_ie(pos, end - pos, WLAN_EID_VENDOR_SPECIFIC);
-	if (vendor)
-		wpas_mbo_ie_trans_req(wpa_s, vendor + 2, vendor[1]);
-#endif /* CONFIG_MBO */
 
 	if (wpa_s->wnm_mode & WNM_BSS_TM_REQ_PREF_CAND_LIST_INCLUDED) {
 		unsigned int valid_ms;

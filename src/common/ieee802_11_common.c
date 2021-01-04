@@ -136,6 +136,10 @@ static int ieee802_11_parse_vendor_specific(const u8 *pos, size_t elen,
 		case DPP_CC_OUI_TYPE:
 			/* DPP Configurator Connectivity element */
 			break;
+		case SAE_PK_OUI_TYPE:
+			elems->sae_pk = pos + 4;
+			elems->sae_pk_len = elen - 4;
+			break;
 		default:
 			wpa_printf(MSG_MSGDUMP, "Unknown WFA "
 				   "information element ignored "
@@ -1513,7 +1517,8 @@ int ieee80211_is_dfs(int freq, const struct hostapd_hw_modes *modes,
 
 static int is_11b(u8 rate)
 {
-	return rate == 0x02 || rate == 0x04 || rate == 0x0b || rate == 0x16;
+	return rate == 0x02 || rate == 0x04 || rate == 0x0b || rate == 0x16
+		|| rate == 0x82 || rate == 0x84 || rate == 0x8b || rate == 0x96;
 }
 
 
@@ -1774,7 +1779,9 @@ const char * status2str(u16 status)
 	S2S(FILS_AUTHENTICATION_FAILURE)
 	S2S(UNKNOWN_AUTHENTICATION_SERVER)
 	S2S(UNKNOWN_PASSWORD_IDENTIFIER)
+	S2S(DENIED_HE_NOT_SUPPORTED)
 	S2S(SAE_HASH_TO_ELEMENT)
+	S2S(SAE_PK)
 	}
 	return "UNKNOWN";
 #undef S2S
@@ -1872,7 +1879,6 @@ const struct oper_class_map global_op_class[] = {
 	 */
 	{ HOSTAPD_MODE_IEEE80211A, 128, 36, 161, 4, BW80, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 129, 50, 114, 16, BW160, P2P_SUPP },
-	{ HOSTAPD_MODE_IEEE80211A, 130, 36, 161, 4, BW80P80, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211A, 131, 1, 233, 4, BW20, P2P_SUPP },
 
 	/*
@@ -1884,6 +1890,12 @@ const struct oper_class_map global_op_class[] = {
 	{ HOSTAPD_MODE_IEEE80211AD, 181, 9, 13, 1, BW4320, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211AD, 182, 17, 20, 1, BW6480, P2P_SUPP },
 	{ HOSTAPD_MODE_IEEE80211AD, 183, 25, 27, 1, BW8640, P2P_SUPP },
+
+	/* Keep the operating class 130 as the last entry as a workaround for
+	 * the OneHundredAndThirty Delimiter value used in the Supported
+	 * Operating Classes element to indicate the end of the Operating
+	 * Classes field. */
+	{ HOSTAPD_MODE_IEEE80211A, 130, 36, 161, 4, BW80P80, P2P_SUPP },
 	{ -1, 0, 0, 0, 0, BW20, NO_P2P_SUPP }
 };
 

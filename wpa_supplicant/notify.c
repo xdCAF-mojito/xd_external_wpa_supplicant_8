@@ -160,7 +160,8 @@ void wpas_notify_auth_status_code(struct wpa_supplicant *wpa_s)
 }
 
 
-void wpas_notify_assoc_status_code(struct wpa_supplicant *wpa_s)
+void wpas_notify_assoc_status_code(struct wpa_supplicant *wpa_s,
+				   const u8 *bssid, u8 timed_out)
 {
 	if (wpa_s->p2p_mgmt)
 		return;
@@ -168,7 +169,7 @@ void wpas_notify_assoc_status_code(struct wpa_supplicant *wpa_s)
 	wpas_dbus_signal_prop_changed(wpa_s, WPAS_DBUS_PROP_ASSOC_STATUS_CODE);
 
 #ifdef CONFIG_HIDL
-	wpas_hidl_notify_assoc_reject(wpa_s);
+	wpas_hidl_notify_assoc_reject(wpa_s, bssid, timed_out);
 #endif
 }
 
@@ -1079,16 +1080,25 @@ void wpas_notify_hs20_rx_deauth_imminent_notice(struct wpa_supplicant *wpa_s,
 						const char *url)
 {
 #ifdef CONFIG_HS20
-	if (!wpa_s || !url)
+	if (!wpa_s)
 		return;
 
 #ifdef CONFIG_HIDL
 	wpas_hidl_notify_hs20_rx_deauth_imminent_notice(wpa_s, code, reauth_delay,
-							url);
+			url);
 #endif
 #endif /* CONFIG_HS20 */
 }
 
+void wpas_notify_hs20_rx_terms_and_conditions_acceptance(
+		struct wpa_supplicant *wpa_s, const char *url) {
+#ifdef CONFIG_HS20
+	if (!wpa_s || !url)
+		return;
+
+	wpas_hidl_notify_hs20_rx_terms_and_conditions_acceptance(wpa_s, url);
+#endif /* CONFIG_HS20 */
+}
 
 #ifdef CONFIG_MESH
 
@@ -1323,4 +1333,17 @@ void wpas_notify_dpp_conf(void *msg_ctx, u8 type, u8* ssid,
 				  psk_set, psk);
 #endif /* CONFIG_HIDL */
 #endif /* CONFIG_DPP */
+}
+
+void wpas_notify_transition_disable(struct wpa_supplicant *wpa_s,
+				    struct wpa_ssid *ssid,
+				    u8 bitmap)
+{
+	if (!wpa_s)
+		return;
+
+	if (!ssid)
+		return;
+
+	wpas_hidl_notify_transition_disable(wpa_s, ssid, bitmap);
 }
