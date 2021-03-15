@@ -572,6 +572,9 @@
 #define WLAN_RSNX_CAPAB_PROTECTED_TWT 4
 #define WLAN_RSNX_CAPAB_SAE_H2E 5
 #define WLAN_RSNX_CAPAB_SAE_PK 6
+#define WLAN_RSNX_CAPAB_SECURE_LTF 8
+#define WLAN_RSNX_CAPAB_SECURE_RTT 9
+#define WLAN_RSNX_CAPAB_PROT_RANGE_NEG 10
 
 /* Action frame categories (IEEE Std 802.11-2016, 9.4.1.11, Table 9-76) */
 #define WLAN_ACTION_SPECTRUM_MGMT 0
@@ -2171,6 +2174,7 @@ struct ieee80211_he_operation {
 	 * Max Co-Hosted BSSID Indicator subfield (1 octet), and/or 6 GHz
 	 * Operation Information subfield (5 octets). */
 } STRUCT_PACKED;
+#define IEEE80211_HE_CAPAB_MIN_LEN (6 + 11)
 
 /* IEEE P802.11ax/D6.0, Figure 9-787k - 6 GHz Operation Information field */
 struct ieee80211_he_6ghz_oper_info {

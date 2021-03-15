@@ -95,8 +95,12 @@ struct wpa_sm {
 	int mfp; /* 0 = disabled, 1 = optional, 2 = mandatory */
 	int ocv; /* Operating Channel Validation */
 	int sae_pwe; /* SAE PWE generation options */
-	int sae_pk; /* whether SAE-PK is used */
 	int adaptive11r_key_mgmt;
+
+	unsigned int sae_pk:1; /* whether SAE-PK is used */
+	unsigned int secure_ltf:1;
+	unsigned int secure_rtt:1;
+	unsigned int prot_range_neg:1;
 
 	u8 *assoc_wpa_ie; /* Own WPA/RSN IE from (Re)AssocReq */
 	size_t assoc_wpa_ie_len;
@@ -373,6 +377,8 @@ wpa_sm_tdls_peer_addset(struct wpa_sm *sm, const u8 *addr, int add,
 			size_t supp_rates_len,
 			const struct ieee80211_ht_capabilities *ht_capab,
 			const struct ieee80211_vht_capabilities *vht_capab,
+			const struct ieee80211_he_capabilities *he_capab,
+			size_t he_capab_len,
 			u8 qosinfo, int wmm, const u8 *ext_capab,
 			size_t ext_capab_len, const u8 *supp_channels,
 			size_t supp_channels_len, const u8 *supp_oper_classes,
@@ -382,7 +388,9 @@ wpa_sm_tdls_peer_addset(struct wpa_sm *sm, const u8 *addr, int add,
 		return sm->ctx->tdls_peer_addset(sm->ctx->ctx, addr, add,
 						 aid, capability, supp_rates,
 						 supp_rates_len, ht_capab,
-						 vht_capab, qosinfo, wmm,
+						 vht_capab,
+						 he_capab, he_capab_len,
+						 qosinfo, wmm,
 						 ext_capab, ext_capab_len,
 						 supp_channels,
 						 supp_channels_len,
