@@ -461,6 +461,11 @@ void wpas_notify_network_removed(struct wpa_supplicant *wpa_s,
 		wpas_notify_persistent_group_removed(wpa_s, ssid);
 
 	wpas_p2p_network_removed(wpa_s, ssid);
+
+#ifdef CONFIG_PASN
+	if (wpa_s->pasn.ssid == ssid)
+		wpa_s->pasn.ssid = NULL;
+#endif /* CONFIG_PASN */
 }
 
 
@@ -688,13 +693,11 @@ void wpas_notify_p2p_device_found(struct wpa_supplicant *wpa_s,
 	/* Notify a new peer has been detected*/
 	wpas_dbus_signal_peer_device_found(wpa_s, info->p2p_device_addr);
 
-#ifdef CONFIG_HIDL
 	wpas_hidl_notify_p2p_device_found(wpa_s, addr, info,
 					  peer_wfd_device_info,
-                                          peer_wfd_device_info_len,
+					  peer_wfd_device_info_len,
 					  peer_wfd_r2_device_info,
-                                          peer_wfd_r2_device_info_len);
-#endif
+					  peer_wfd_r2_device_info_len);
 }
 
 

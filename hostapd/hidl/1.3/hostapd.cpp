@@ -381,7 +381,7 @@ std::string CreateHostapdConfig(
 		    is_60Ghz_band_only ? "GCMP" : "CCMP",
 		    is_6Ghz_band_only ? 1 : 2,
                     // KEYSTONE(c4e49eaa8d51e8469ae9e9a0cfe8d3f8ef18f2c3,b/179078056)
-		    isWigig ? "GCMP" : "CCMP");
+		    nw_params.V1_2.passphrase.c_str());
 		break;
 	default:
 		wpa_printf(MSG_ERROR, "Unknown encryption type");
@@ -543,9 +543,10 @@ std::string CreateHostapdConfig(
 
 Generation getGeneration(hostapd_hw_modes *current_mode)
 {
-	wpa_printf(MSG_DEBUG, "getGeneration hwmode=%d, ht_enabled=%d, vht_enabled=%d",
+	wpa_printf(MSG_DEBUG, "getGeneration hwmode=%d, ht_enabled=%d,"
+		   " vht_enabled=%d, he_supported=%d",
 		   current_mode->mode, current_mode->ht_capab != 0,
-		   current_mode->vht_capab != 0);
+		   current_mode->vht_capab != 0, current_mode->he_capab->he_supported);
 	switch (current_mode->mode) {
 	case HOSTAPD_MODE_IEEE80211B:
 		return Generation::WIFI_STANDARD_LEGACY;
@@ -553,11 +554,13 @@ Generation getGeneration(hostapd_hw_modes *current_mode)
 		return current_mode->ht_capab == 0 ?
 		       Generation::WIFI_STANDARD_LEGACY : Generation::WIFI_STANDARD_11N;
 	case HOSTAPD_MODE_IEEE80211A:
+		if (current_mode->he_capab->he_supported) {
+			return Generation::WIFI_STANDARD_11AX;
+		}
 		return current_mode->vht_capab == 0 ?
 		       Generation::WIFI_STANDARD_11N : Generation::WIFI_STANDARD_11AC;
 	case HOSTAPD_MODE_IEEE80211AD:
 		return Generation::WIFI_STANDARD_11AD;
-        // TODO: b/162484222 miss HOSTAPD_MODE_IEEE80211AX definition.
 	default:
 		return Generation::WIFI_STANDARD_UNKNOWN;
 	}
@@ -943,13 +946,31 @@ V1_2::HostapdStatus Hostapd::addSingleAccessPoint(
 
 V1_0::HostapdStatus Hostapd::removeAccessPointInternal(const std::string& iface_name)
 {
-	std::vector<char> remove_iface_param_vec(
-	    iface_name.begin(), iface_name.end() + 1);
-	if (hostapd_remove_iface(interfaces_, remove_iface_param_vec.data()) <
-	    0) {
-		wpa_printf(
-		    MSG_ERROR, "Removing interface %s failed",
-		    iface_name.c_str());
+	// interfaces to be removed
+	std::vector<std::string> interfaces;
+	bool is_error = false;
+
+	const auto it = br_interfaces_.find(iface_name);
+	if (it != br_interfaces_.end()) {
+		// In case bridge, remove managed interfaces
+		interfaces = it->second;
+		br_interfaces_.erase(iface_name);
+	} else {
+		// else remove current interface
+		interfaces.push_back(iface_name);
+	}
+
+	for (auto& iface : interfaces) {
+		std::vector<char> remove_iface_param_vec(
+		    iface.begin(), iface.end() + 1);
+		if (hostapd_remove_iface(interfaces_, remove_iface_param_vec.data()) <
+		    0) {
+			wpa_printf(MSG_INFO, "Remove interface %s failed",
+			    iface.c_str());
+			is_error = true;
+		}
+	}
+	if (is_error) {
 		return {V1_0::HostapdStatusCode::FAILURE_UNKNOWN, ""};
 	}
 	return {V1_0::HostapdStatusCode::SUCCESS, ""};

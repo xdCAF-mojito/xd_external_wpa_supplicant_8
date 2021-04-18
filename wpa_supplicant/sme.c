@@ -300,7 +300,7 @@ static void sme_auth_handle_rrm(struct wpa_supplicant *wpa_s,
 	*pos++ = WLAN_EID_RRM_ENABLED_CAPABILITIES;
 	*pos++ = rrm_ie_len;
 
-	/* Set supported capabilites flags */
+	/* Set supported capabilities flags */
 	if (wpa_s->drv_rrm_flags & WPA_DRIVER_FLAGS_TX_POWER_INSERTION)
 		*pos |= WLAN_RRM_CAPS_LINK_MEASUREMENT;
 
@@ -663,7 +663,7 @@ static void sme_send_authentication(struct wpa_supplicant *wpa_s,
 	}
 
 #ifdef CONFIG_HS20
-	if (is_hs20_network(wpa_s, ssid, bss)) {
+	if (is_hs20_config(wpa_s) && is_hs20_network(wpa_s, ssid, bss)) {
 		struct wpabuf *hs20;
 
 		hs20 = wpabuf_alloc(20 + MAX_ROAMING_CONS_OI_LEN);
@@ -1881,12 +1881,10 @@ pfs_fail:
 #endif /* CONFIG_DPP2 */
 
 	wpa_s->mscs_setup_done = false;
-	if (wpa_s->current_bss && wpa_s->robust_av.valid_config) {
+	if (wpa_bss_ext_capab(wpa_s->current_bss, WLAN_EXT_CAPAB_MSCS) &&
+	    wpa_s->robust_av.valid_config) {
 		struct wpabuf *mscs_ie;
 		size_t mscs_ie_len, buf_len, *wpa_ie_len, max_ie_len;
-
-		if (!wpa_bss_ext_capab(wpa_s->current_bss, WLAN_EXT_CAPAB_MSCS))
-			goto mscs_fail;
 
 		buf_len = 3 +	/* MSCS descriptor IE header */
 			  1 +	/* Request type */
@@ -2462,7 +2460,7 @@ static void wpa_obss_scan_freqs_list(struct wpa_supplicant *wpa_s,
 	int start, end;
 
 	mode = get_mode(wpa_s->hw.modes, wpa_s->hw.num_modes,
-			HOSTAPD_MODE_IEEE80211G, 0);
+			HOSTAPD_MODE_IEEE80211G, false);
 	if (mode == NULL) {
 		/* No channels supported in this band - use empty list */
 		params->freqs = os_zalloc(sizeof(int));
