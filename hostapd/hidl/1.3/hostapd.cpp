@@ -341,8 +341,7 @@ std::string CreateHostapdConfig(
 		encryption_config_as_string = StringPrintf(
 		    "wpa=2\n"
 		    "rsn_pairwise=%s\n"
-		    "wpa_passphrase=%s\n"
-		    "ieee80211w=1",
+		    "wpa_passphrase=%s",
 		    is_60Ghz_band_only ? "GCMP" : "CCMP",
 		    nw_params.V1_2.passphrase.c_str());
 		break;
@@ -472,7 +471,6 @@ std::string CreateHostapdConfig(
 		he_params_as_string = StringPrintf(
 		    "ieee80211ax=1\n"
 		    "he_bss_color=%d\n"
-		    "he_oper_chwidth=1\n"
 		    "he_su_beamformer=%d\n"
 		    "he_su_beamformee=%d\n"
 		    "he_mu_beamformer=%d\n"
@@ -526,9 +524,7 @@ std::string CreateHostapdConfig(
 	    "%s\n"
 	    "%s\n"
 	    "%s\n"
-	    "%s\n"
-	    "ocv=1\n"
-	    "beacon_prot=1\n",
+	    "%s\n",
 	    iface_params.V1_2.V1_1.V1_0.ifaceName.c_str(), ssid_as_string.c_str(),
 	    channel_config_as_string.c_str(),
 	    iface_params.V1_2.V1_1.V1_0.hwModeParams.enable80211N ? 1 : 0,
@@ -937,7 +933,7 @@ V1_2::HostapdStatus Hostapd::addSingleAccessPoint(
 	iface_hapd->setup_complete_cb_ctx = iface_hapd;
 	iface_hapd->sta_authorized_cb = onAsyncStaAuthorizedCb;
 	iface_hapd->sta_authorized_cb_ctx = iface_hapd;
-	wpa_msg_register_hidl_cb(onAsyncWpaEventCb);
+	wpa_msg_register_cb(onAsyncWpaEventCb);
 
 	if (hostapd_enable_iface(iface_hapd->iface) < 0) {
 		wpa_printf(
