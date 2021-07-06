@@ -73,7 +73,8 @@ int wpas_p2p_find(struct wpa_supplicant *wpa_s, unsigned int timeout,
 		  enum p2p_discovery_type type,
 		  unsigned int num_req_dev_types, const u8 *req_dev_types,
 		  const u8 *dev_id, unsigned int search_delay,
-		  u8 seek_cnt, const char **seek_string, int freq);
+		  u8 seek_cnt, const char **seek_string, int freq,
+		  bool include_6ghz);
 void wpas_p2p_stop_find(struct wpa_supplicant *wpa_s);
 int wpas_p2p_listen(struct wpa_supplicant *wpa_s, unsigned int timeout);
 int wpas_p2p_listen_start(struct wpa_supplicant *wpa_s, unsigned int timeout);
@@ -145,9 +146,11 @@ int wpas_p2p_scan_no_go_seen(struct wpa_supplicant *wpa_s);
 int wpas_p2p_get_ht40_mode(struct wpa_supplicant *wpa_s,
 			   struct hostapd_hw_modes *mode, u8 channel);
 int wpas_p2p_get_vht80_center(struct wpa_supplicant *wpa_s,
-			      struct hostapd_hw_modes *mode, u8 channel);
+			      struct hostapd_hw_modes *mode, u8 channel,
+			      u8 op_class);
 int wpas_p2p_get_vht160_center(struct wpa_supplicant *wpa_s,
-			       struct hostapd_hw_modes *mode, u8 channel);
+			       struct hostapd_hw_modes *mode, u8 channel,
+			       u8 op_class);
 unsigned int wpas_p2p_search_delay(struct wpa_supplicant *wpa_s);
 void wpas_p2p_new_psk_cb(struct wpa_supplicant *wpa_s, const u8 *mac_addr,
 			 const u8 *p2p_dev_addr,
