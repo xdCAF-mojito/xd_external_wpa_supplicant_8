@@ -41,10 +41,30 @@ struct hostapd_channel_data * hw_get_channel_chan(struct hostapd_hw_modes *mode,
 
 
 struct hostapd_channel_data *
+hw_mode_get_channel(struct hostapd_hw_modes *mode, int freq, int *chan)
+{
+	int i;
+
+	for (i = 0; i < mode->num_channels; i++) {
+		struct hostapd_channel_data *ch = &mode->channels[i];
+
+		if (ch->freq == freq) {
+			if (chan)
+				*chan = ch->chan;
+			return ch;
+		}
+	}
+
+	return NULL;
+}
+
+
+struct hostapd_channel_data *
 hw_get_channel_freq(enum hostapd_hw_mode mode, int freq, int *chan,
 		    struct hostapd_hw_modes *hw_features, int num_hw_features)
 {
-	int i, j;
+	struct hostapd_channel_data *chan_data;
+	int i;
 
 	if (chan)
 		*chan = 0;
@@ -52,21 +72,15 @@ hw_get_channel_freq(enum hostapd_hw_mode mode, int freq, int *chan,
 	if (!hw_features)
 		return NULL;
 
-	for (j = 0; j < num_hw_features; j++) {
-		struct hostapd_hw_modes *curr_mode = &hw_features[j];
+	for (i = 0; i < num_hw_features; i++) {
+		struct hostapd_hw_modes *curr_mode = &hw_features[i];
 
 		if (curr_mode->mode != mode)
 			continue;
-		for (i = 0; i < curr_mode->num_channels; i++) {
-			struct hostapd_channel_data *ch =
-				&curr_mode->channels[i];
 
-			if (ch->freq == freq) {
-				if (chan)
-					*chan = ch->chan;
-				return ch;
-			}
-		}
+		chan_data = hw_mode_get_channel(curr_mode, freq, chan);
+		if (chan_data)
+			return chan_data;
 	}
 
 	return NULL;
@@ -100,7 +114,7 @@ int allowed_ht40_channel_pair(enum hostapd_hw_mode mode,
 {
 	int ok, first;
 	int allowed[] = { 36, 44, 52, 60, 100, 108, 116, 124, 132, 140,
-			  149, 157, 165, 173, 177, 184, 192 };
+			  149, 157, 165, 184, 192 };
 	size_t k;
 	int ht40_plus, pri_chan, sec_chan;
 
@@ -403,7 +417,16 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data,
 	data->sec_channel_offset = sec_channel_offset;
 	data->center_freq1 = freq + sec_channel_offset * 10;
 	data->center_freq2 = 0;
-	data->bandwidth = sec_channel_offset ? 40 : 20;
+	if (oper_chwidth == CHANWIDTH_80MHZ)
+		data->bandwidth = 80;
+	else if (oper_chwidth == CHANWIDTH_160MHZ ||
+		 oper_chwidth == CHANWIDTH_80P80MHZ)
+		data->bandwidth = 160;
+	else if (sec_channel_offset)
+		data->bandwidth = 40;
+	else
+		data->bandwidth = 20;
+
 
 	hostapd_encode_edmg_chan(enable_edmg, edmg_channel, channel,
 				 &data->edmg);
@@ -415,7 +438,7 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data,
 			return -1;
 		}
 
-		if (center_idx_to_bw_6ghz(channel) != 0) {
+		if (center_idx_to_bw_6ghz(channel) < 0) {
 			wpa_printf(MSG_ERROR,
 				   "Invalid control channel for 6 GHz band");
 			return -1;
@@ -427,9 +450,8 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data,
 					   "Segment 0 center frequency isn't set");
 				return -1;
 			}
-
-			data->center_freq1 = data->freq;
-			data->bandwidth = 20;
+			if (!sec_channel_offset)
+				data->center_freq1 = data->freq;
 		} else {
 			int freq1, freq2 = 0;
 			int bw = center_idx_to_bw_6ghz(center_segment0);
@@ -540,13 +562,20 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data,
 		if (center_segment1 ||
 		    (center_segment0 != 0 &&
 		     5000 + center_segment0 * 5 != data->center_freq1 &&
-		     2407 + center_segment0 * 5 != data->center_freq1))
+		     2407 + center_segment0 * 5 != data->center_freq1)) {
+			wpa_printf(MSG_ERROR,
+				   "20/40 MHz: center segment 0 (=%d) and center freq 1 (=%d) not in sync",
+				   center_segment0, data->center_freq1);
 			return -1;
+		}
 		break;
 	case CHANWIDTH_80P80MHZ:
 		if (center_segment1 == center_segment0 + 4 ||
-		    center_segment1 == center_segment0 - 4)
+		    center_segment1 == center_segment0 - 4) {
+			wpa_printf(MSG_ERROR,
+				   "80+80 MHz: center segment 1 only 20 MHz apart");
 			return -1;
+		}
 		data->center_freq2 = 5000 + center_segment1 * 5;
 		/* fall through */
 	case CHANWIDTH_80MHZ:
@@ -555,8 +584,11 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data,
 		     center_segment1) ||
 		    (oper_chwidth == CHANWIDTH_80P80MHZ &&
 		     !center_segment1) ||
-		    !sec_channel_offset)
+		    !sec_channel_offset) {
+			wpa_printf(MSG_ERROR,
+				   "80/80+80 MHz: center segment 1 wrong or no second channel offset");
 			return -1;
+		}
 		if (!center_segment0) {
 			if (channel <= 48)
 				center_segment0 = 42;
@@ -584,16 +616,25 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data,
 			    center_segment0 == channel - 2 ||
 			    center_segment0 == channel - 6)
 				data->center_freq1 = 5000 + center_segment0 * 5;
-			else
+			else {
+				wpa_printf(MSG_ERROR,
+					   "Wrong coupling between HT and VHT/HE channel setting");
 				return -1;
+			}
 		}
 		break;
 	case CHANWIDTH_160MHZ:
 		data->bandwidth = 160;
-		if (center_segment1)
+		if (center_segment1) {
+			wpa_printf(MSG_ERROR,
+				   "160 MHz: center segment 1 should not be set");
 			return -1;
-		if (!sec_channel_offset)
+		}
+		if (!sec_channel_offset) {
+			wpa_printf(MSG_ERROR,
+				   "160 MHz: second channel offset not set");
 			return -1;
+		}
 		/*
 		 * Note: HT/VHT config and params are coupled. Check if
 		 * HT40 channel band is in VHT160 channel band configuration.
@@ -607,8 +648,11 @@ int hostapd_set_freq_params(struct hostapd_freq_params *data,
 		    center_segment0 == channel - 10 ||
 		    center_segment0 == channel - 14)
 			data->center_freq1 = 5000 + center_segment0 * 5;
-		else
+		else {
+			wpa_printf(MSG_ERROR,
+				   "160 MHz: HT40 channel band is not in 160 MHz band");
 			return -1;
+		}
 		break;
 	}
 

@@ -461,6 +461,11 @@ void wpas_notify_network_removed(struct wpa_supplicant *wpa_s,
 		wpas_notify_persistent_group_removed(wpa_s, ssid);
 
 	wpas_p2p_network_removed(wpa_s, ssid);
+
+#ifdef CONFIG_PASN
+	if (wpa_s->pasn.ssid == ssid)
+		wpa_s->pasn.ssid = NULL;
+#endif /* CONFIG_PASN */
 }
 
 
@@ -688,13 +693,11 @@ void wpas_notify_p2p_device_found(struct wpa_supplicant *wpa_s,
 	/* Notify a new peer has been detected*/
 	wpas_dbus_signal_peer_device_found(wpa_s, info->p2p_device_addr);
 
-#ifdef CONFIG_HIDL
 	wpas_hidl_notify_p2p_device_found(wpa_s, addr, info,
 					  peer_wfd_device_info,
-                                          peer_wfd_device_info_len,
+					  peer_wfd_device_info_len,
 					  peer_wfd_r2_device_info,
-                                          peer_wfd_r2_device_info_len);
-#endif
+					  peer_wfd_r2_device_info_len);
 }
 
 
@@ -1080,16 +1083,25 @@ void wpas_notify_hs20_rx_deauth_imminent_notice(struct wpa_supplicant *wpa_s,
 						const char *url)
 {
 #ifdef CONFIG_HS20
-	if (!wpa_s || !url)
+	if (!wpa_s)
 		return;
 
 #ifdef CONFIG_HIDL
 	wpas_hidl_notify_hs20_rx_deauth_imminent_notice(wpa_s, code, reauth_delay,
-							url);
+			url);
 #endif
 #endif /* CONFIG_HS20 */
 }
 
+void wpas_notify_hs20_rx_terms_and_conditions_acceptance(
+		struct wpa_supplicant *wpa_s, const char *url) {
+#ifdef CONFIG_HS20
+	if (!wpa_s || !url)
+		return;
+
+	wpas_hidl_notify_hs20_rx_terms_and_conditions_acceptance(wpa_s, url);
+#endif /* CONFIG_HS20 */
+}
 
 #ifdef CONFIG_MESH
 
@@ -1324,4 +1336,25 @@ void wpas_notify_dpp_conf(void *msg_ctx, u8 type, u8* ssid,
 				  psk_set, psk);
 #endif /* CONFIG_HIDL */
 #endif /* CONFIG_DPP */
+}
+
+void wpas_notify_transition_disable(struct wpa_supplicant *wpa_s,
+				    struct wpa_ssid *ssid,
+				    u8 bitmap)
+{
+	if (!wpa_s)
+		return;
+
+	if (!ssid)
+		return;
+
+	wpas_hidl_notify_transition_disable(wpa_s, ssid, bitmap);
+}
+
+void wpas_notify_network_not_found(struct wpa_supplicant *wpa_s)
+{
+	if (!wpa_s)
+		return;
+
+	wpas_hidl_notify_network_not_found(wpa_s);
 }

@@ -49,6 +49,8 @@
 #define WPA_KEY_MGMT_OWE BIT(22)
 #define WPA_KEY_MGMT_DPP BIT(23)
 #define WPA_KEY_MGMT_FT_IEEE8021X_SHA384 BIT(24)
+#define WPA_KEY_MGMT_PASN BIT(25)
+
 
 #define WPA_KEY_MGMT_FT (WPA_KEY_MGMT_FT_PSK | \
 			 WPA_KEY_MGMT_FT_IEEE8021X | \
@@ -403,7 +405,8 @@ enum wpa_radio_work_band {
 enum beacon_rate_type {
 	BEACON_RATE_LEGACY,
 	BEACON_RATE_HT,
-	BEACON_RATE_VHT
+	BEACON_RATE_VHT,
+	BEACON_RATE_HE
 };
 
 enum eap_proxy_sim_state {

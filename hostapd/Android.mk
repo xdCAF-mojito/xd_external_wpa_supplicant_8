@@ -26,9 +26,6 @@ L_CFLAGS += -DANDROID_LOG_NAME=\"hostapd\"
 
 L_CFLAGS += -Wall -Werror
 
-# TODO: move off readdir_r upstream, pull fix back (http://b/72326431).
-L_CFLAGS += -Wno-error-deprecated-declarations
-
 # Disable unused parameter warnings
 L_CFLAGS += -Wno-unused-parameter
 
@@ -74,6 +71,10 @@ INCLUDES += external/libnl-headers
 endif
 endif
 
+ifdef CONFIG_TESTING_OPTIONS
+L_CFLAGS += -DCONFIG_TESTING_OPTIONS
+CONFIG_WPS_TESTING=y
+endif
 
 ifndef CONFIG_OS
 ifdef CONFIG_NATIVE_WINDOWS
@@ -266,6 +267,10 @@ endif
 ifeq ($(CONFIG_SAE),y)
 L_CFLAGS += -DCONFIG_SAE
 OBJS += src/common/sae.c
+ifdef CONFIG_SAE_PK
+L_CFLAGS += -DCONFIG_SAE_PK
+OBJS += src/common/sae_pk.c
+endif
 NEED_ECC=y
 NEED_DH_GROUPS=y
 NEED_HMAC_SHA256_KDF=y
@@ -430,7 +435,7 @@ endif
 ifdef CONFIG_EAP_SIM_COMMON
 OBJS += src/eap_common/eap_sim_common.c
 # Example EAP-SIM/AKA interface for GSM/UMTS authentication. This can be
-# replaced with another file implementating the interface specified in
+# replaced with another file implementing the interface specified in
 # eap_sim_db.h.
 OBJS += src/eap_server/eap_sim_db.c
 NEED_FIPS186_2_PRF=y
@@ -579,6 +584,16 @@ NEED_ASN1=y
 ifdef CONFIG_DPP2
 L_CFLAGS += -DCONFIG_DPP2
 endif
+endif
+
+ifdef CONFIG_PASN
+L_CFLAGS += -DCONFIG_PASN
+L_CFLAGS += -DCONFIG_PTKSA_CACHE
+NEED_HMAC_SHA256_KDF=y
+NEED_HMAC_SHA384_KDF=y
+NEED_SHA256=y
+NEED_SHA384=y
+OBJS += src/common/ptksa_cache.c
 endif
 
 ifdef CONFIG_EAP_IKEV2
@@ -1121,7 +1136,7 @@ L_CFLAGS += -DCONFIG_CTRL_IFACE_HIDL
 ifdef HOSTAPD_USE_VENDOR_HIDL
 L_CFLAGS += -DCONFIG_USE_VENDOR_HIDL
 endif
-L_CPPFLAGS = -Wall -Werror
+L_CPPFLAGS = -Wall -Werror -Wno-unused-variable
 endif
 endif
 
@@ -1129,6 +1144,9 @@ endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := hostapd_cli
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-BSD SPDX-license-identifier-BSD-3-Clause SPDX-license-identifier-ISC legacy_unencumbered
+LOCAL_LICENSE_CONDITIONS := notice unencumbered
+LOCAL_NOTICE_FILE := $(LOCAL_PATH)/../COPYING $(LOCAL_PATH)/../NOTICE
 LOCAL_PROPRIETARY_MODULE := true
 LOCAL_SHARED_LIBRARIES := libc libcutils liblog
 LOCAL_CFLAGS := $(L_CFLAGS)
@@ -1139,6 +1157,9 @@ include $(BUILD_EXECUTABLE)
 ########################
 include $(CLEAR_VARS)
 LOCAL_MODULE := hostapd
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-BSD SPDX-license-identifier-BSD-3-Clause SPDX-license-identifier-ISC legacy_unencumbered
+LOCAL_LICENSE_CONDITIONS := notice unencumbered
+LOCAL_NOTICE_FILE := $(LOCAL_PATH)/../COPYING $(LOCAL_PATH)/../NOTICE
 LOCAL_MODULE_TAGS := optional
 LOCAL_PROPRIETARY_MODULE := true
 LOCAL_MODULE_RELATIVE_PATH := hw
@@ -1161,6 +1182,7 @@ ifeq ($(HOSTAPD_USE_HIDL), y)
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd@1.0
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd@1.1
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd@1.2
+LOCAL_SHARED_LIBRARIES += android.hardware.wifi.hostapd@1.3
 LOCAL_SHARED_LIBRARIES += libbase libhidlbase libutils
 LOCAL_STATIC_LIBRARIES += libhostapd_hidl
 ifdef HOSTAPD_USE_VENDOR_HIDL
@@ -1178,6 +1200,9 @@ include $(BUILD_EXECUTABLE)
 ########################
 include $(CLEAR_VARS)
 LOCAL_MODULE := hostapd_nohidl
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-BSD SPDX-license-identifier-BSD-3-Clause SPDX-license-identifier-ISC legacy_unencumbered
+LOCAL_LICENSE_CONDITIONS := notice unencumbered
+LOCAL_NOTICE_FILE := $(LOCAL_PATH)/../COPYING $(LOCAL_PATH)/../NOTICE
 LOCAL_MODULE_TAGS := optional
 LOCAL_PROPRIETARY_MODULE := true
 ifdef CONFIG_DRIVER_CUSTOM
@@ -1204,11 +1229,14 @@ ifeq ($(HOSTAPD_USE_HIDL), y)
 ########################
 include $(CLEAR_VARS)
 LOCAL_MODULE := libhostapd_hidl
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-BSD SPDX-license-identifier-BSD-3-Clause SPDX-license-identifier-ISC legacy_unencumbered
+LOCAL_LICENSE_CONDITIONS := notice unencumbered
+LOCAL_NOTICE_FILE := $(LOCAL_PATH)/../COPYING $(LOCAL_PATH)/../NOTICE
 LOCAL_VENDOR_MODULE := true
 LOCAL_CPPFLAGS := $(L_CPPFLAGS)
 LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_C_INCLUDES := $(INCLUDES)
-HIDL_INTERFACE_VERSION = 1.2
+HIDL_INTERFACE_VERSION = 1.3
 LOCAL_SRC_FILES := \
     hidl/$(HIDL_INTERFACE_VERSION)/hidl.cpp \
     hidl/$(HIDL_INTERFACE_VERSION)/hostapd.cpp
@@ -1216,6 +1244,7 @@ LOCAL_SHARED_LIBRARIES := \
     android.hardware.wifi.hostapd@1.0 \
     android.hardware.wifi.hostapd@1.1 \
     android.hardware.wifi.hostapd@1.2 \
+    android.hardware.wifi.hostapd@1.3 \
     libbase \
     libhidlbase \
     libutils \

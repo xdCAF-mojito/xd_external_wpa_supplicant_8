@@ -267,6 +267,9 @@ std::string CreateHostapdConfig(
 	bool isWigig = ((channelParams.channel & 0xFF0000) == wigigOpClass);
 	channelParams.channel &= 0xFFFF;
 
+	unsigned int band = 0;
+	band |= v_iface_params.channelParams.bandMask;
+	bool is_6Ghz_band_only = (band  == static_cast<uint32_t>(IHostapdVendor::BandMask::BAND_6_GHZ));
 	// Encryption config string
 	std::string encryption_config_as_string;
 	switch (v_nw_params.vendorEncryptionType) {
@@ -304,20 +307,12 @@ std::string CreateHostapdConfig(
 				WPA2_PSK_PASSPHRASE_MAX_LEN_IN_BYTES))) {
 			return "";
 		}
-		if (v_nw_params.enableBeaconProtection) {
-			encryption_config_as_string = StringPrintf(
-			    "wpa=2\n"
-			    "rsn_pairwise=%s\n"
-			    "wpa_passphrase=%s\n"
-			    "ieee80211w=1",
-			    isWigig ? "GCMP" : "CCMP", v_nw_params.passphrase.c_str());
-		} else {
-			encryption_config_as_string = StringPrintf(
-			    "wpa=2\n"
-			    "rsn_pairwise=%s\n"
-			    "wpa_passphrase=%s",
-			    isWigig ? "GCMP" : "CCMP", v_nw_params.passphrase.c_str());
-		}
+		encryption_config_as_string = StringPrintf(
+		    "wpa=2\n"
+		    "rsn_pairwise=%s\n"
+		    "wpa_passphrase=%s\n"
+		    "ieee80211w=1",
+		    isWigig ? "GCMP" : "CCMP", v_nw_params.passphrase.c_str());
 		break;
 #ifdef CONFIG_SAE
 	case IHostapdVendor::VendorEncryptionType::SAE_TRANSITION:
@@ -351,9 +346,11 @@ std::string CreateHostapdConfig(
 		    "wpa_key_mgmt=SAE\n"
 		    "ieee80211w=2\n"
 		    "sae_require_mfp=2\n"
-		    "sae_password=%s",
+		    "sae_password=%s\n"
+		    "sae_pwe=%d",
 		    isWigig ? "GCMP" : "CCMP",
-		    v_nw_params.passphrase.c_str());
+		    v_nw_params.passphrase.c_str(),
+		    is_6Ghz_band_only ? 1 : 2);
 		break;
 #endif /* CONFIG_SAE */
 #ifdef CONFIG_OWE
@@ -378,9 +375,6 @@ std::string CreateHostapdConfig(
 		wpa_printf(MSG_ERROR, "Unknown encryption type");
 		return "";
 	}
-
-	unsigned int band = 0;
-	band |= v_iface_params.channelParams.bandMask;
 
 	std::string channel_config_as_string;
 	bool isFirst = true;
@@ -485,17 +479,6 @@ std::string CreateHostapdConfig(
 		    "country_code=%s",
 		    v_iface_params.VendorV1_1.VendorV1_0.countryCode.c_str());
 
-#ifdef CONFIG_OCV
-	std::string ocv_as_string;
-	ocv_as_string = StringPrintf(
-		"ocv=%d",
-		v_nw_params.enableOCV ? 2 : 0);
-#endif
-	std::string bp_as_string;
-	bp_as_string = StringPrintf(
-		"beacon_prot=%d",
-		v_nw_params.enableBeaconProtection ? 1 : 0);
-
 	return StringPrintf(
 	    "interface=%s\n"
 	    "driver=nl80211\n"
@@ -514,16 +497,15 @@ std::string CreateHostapdConfig(
 	    "ignore_broadcast_ssid=%d\n"
 	    "wowlan_triggers=any\n"
 	    "%s\n"
-	    "%s\n"
-	    "%s\n",
+	    "ocv=2\n"
+	    "beacon_prot=1\n",
 	    iface_params.ifaceName.c_str(), ssid_as_string.c_str(),
 	    channel_config_as_string.c_str(),
 	    iface_params.hwModeParams.enable80211N ? 1 : 0,
 	    iface_params.hwModeParams.enable80211AC ? 1 : 0,
 	    he_params_as_string.c_str(), hw_mode_as_string.c_str(),
 	    bridge_as_string.c_str(), country_as_string.c_str(),
-	    nw_params.isHidden ? 1 : 0, encryption_config_as_string.c_str(),
-	    ocv_as_string.c_str(), bp_as_string.c_str());
+	    nw_params.isHidden ? 1 : 0, encryption_config_as_string.c_str());
 }
 
 template <class CallbackType>

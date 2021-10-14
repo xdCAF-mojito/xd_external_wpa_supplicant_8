@@ -955,10 +955,13 @@ dfs_downgrade_bandwidth(struct hostapd_iface *iface, int *secondary_channel,
 		if (*skip_radar) {
 			*skip_radar = 0;
 		} else {
-			if (iface->conf->vht_oper_chwidth == CHANWIDTH_USE_HT)
+			int oper_chwidth;
+
+			oper_chwidth = hostapd_get_oper_chwidth(iface->conf);
+			if (oper_chwidth == CHANWIDTH_USE_HT)
 				break;
 			*skip_radar = 1;
-			iface->conf->vht_oper_chwidth--;
+			hostapd_set_oper_chwidth(iface->conf, oper_chwidth - 1);
 		}
 	}
 
@@ -1029,6 +1032,7 @@ static int hostapd_dfs_start_channel_switch(struct hostapd_iface *iface)
 	int err = 1;
 	struct hostapd_hw_modes *cmode = iface->current_mode;
 	u8 current_vht_oper_chwidth = hostapd_get_oper_chwidth(iface->conf);
+	int ieee80211_mode = IEEE80211_MODE_AP;
 
 	wpa_printf(MSG_DEBUG, "%s called (CAC active: %s, CSA active: %s)",
 		   __func__, iface->cac_started ? "yes" : "no",
@@ -1066,8 +1070,16 @@ static int hostapd_dfs_start_channel_switch(struct hostapd_iface *iface)
 						  &oper_centr_freq_seg0_idx,
 						  &oper_centr_freq_seg1_idx,
 						  &skip_radar);
-		if (!channel)
-			return err;
+		if (!channel) {
+			/*
+			 * Toggle interface state to enter DFS state
+			 * until NOP is finished.
+			 */
+			hostapd_disable_iface(iface);
+			hostapd_enable_iface(iface);
+			return 0;
+		}
+
 		if (!skip_radar) {
 			iface->freq = channel->freq;
 			iface->conf->channel = channel->chan;
@@ -1096,6 +1108,10 @@ static int hostapd_dfs_start_channel_switch(struct hostapd_iface *iface)
 	os_memset(&csa_settings, 0, sizeof(csa_settings));
 	csa_settings.cs_count = 5;
 	csa_settings.block_tx = 1;
+#ifdef CONFIG_MESH
+	if (iface->mconf)
+		ieee80211_mode = IEEE80211_MODE_MESH;
+#endif /* CONFIG_MESH */
 	err = hostapd_set_freq_params(&csa_settings.freq_params,
 				      iface->conf->hw_mode,
 				      channel->freq,
@@ -1110,7 +1126,7 @@ static int hostapd_dfs_start_channel_switch(struct hostapd_iface *iface)
 				      oper_centr_freq_seg0_idx,
 				      oper_centr_freq_seg1_idx,
 				      cmode->vht_capab,
-				      &cmode->he_capab[IEEE80211_MODE_AP]);
+				      &cmode->he_capab[ieee80211_mode]);
 
 	if (err) {
 		wpa_printf(MSG_ERROR, "DFS failed to calculate CSA freq params");
@@ -1212,7 +1228,9 @@ int hostapd_is_dfs_required(struct hostapd_iface *iface)
 {
 	int n_chans, n_chans1, start_chan_idx, start_chan_idx1, res;
 
-	if (!iface->conf->ieee80211h || !iface->current_mode ||
+	if ((!(iface->drv_flags & WPA_DRIVER_FLAGS_DFS_OFFLOAD) &&
+	     !iface->conf->ieee80211h) ||
+	    !iface->current_mode ||
 	    iface->current_mode->mode != HOSTAPD_MODE_IEEE80211A)
 		return 0;
 
@@ -1263,6 +1281,8 @@ int hostapd_dfs_start_cac(struct hostapd_iface *iface, int freq,
  */
 int hostapd_handle_dfs_offload(struct hostapd_iface *iface)
 {
+	int dfs_res;
+
 	wpa_printf(MSG_DEBUG, "%s: iface->cac_started: %d",
 		   __func__, iface->cac_started);
 
@@ -1278,10 +1298,11 @@ int hostapd_handle_dfs_offload(struct hostapd_iface *iface)
 		return 1;
 	}
 
-	if (ieee80211_is_dfs(iface->freq, iface->hw_features,
-			     iface->num_hw_features)) {
-		wpa_printf(MSG_DEBUG, "%s: freq %d MHz requires DFS",
-			   __func__, iface->freq);
+	dfs_res = hostapd_is_dfs_required(iface);
+	if (dfs_res > 0) {
+		wpa_printf(MSG_DEBUG,
+			   "%s: freq %d MHz requires DFS for %d chans",
+			   __func__, iface->freq, dfs_res);
 		return 0;
 	}
 
@@ -1332,12 +1353,16 @@ int hostapd_is_dfs_overlap(struct hostapd_iface *iface, enum chan_width width,
 		if (!(chan->flag & HOSTAPD_CHAN_RADAR))
 			continue;
 
+		if ((chan->flag & HOSTAPD_CHAN_DFS_MASK) ==
+		    HOSTAPD_CHAN_DFS_AVAILABLE)
+			continue;
+
 		if (center_freq - chan->freq < half_width &&
 		    chan->freq - center_freq < half_width)
 			res++;
 	}
 
-	wpa_printf(MSG_DEBUG, "DFS: (%d, %d): in range: %s",
+	wpa_printf(MSG_DEBUG, "DFS CAC required: (%d, %d): in range: %s",
 		   center_freq - half_width, center_freq + half_width,
 		   res ? "yes" : "no");
 

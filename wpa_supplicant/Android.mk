@@ -18,24 +18,8 @@ endif
 
 include $(LOCAL_PATH)/android.config
 
-ifeq ($(call is-board-platform-in-list,msm8909 msm8937 msm8953 msm8996 msm8998 sdm660 sdm710 sdm845 $(MSMSTEPPE) $(TRINKET) msmnile lito atoll bengal kona),true)
-  $(warning "Disabling OCV support in hostapd for $(TARGET_BOARD_PLATFORM)")
-  CONFIG_OCV=n
-  CONFIG_SAE_LOOP_AND_H2E=n
-endif
-
-
-ifeq ($(call is-board-platform-in-list,msm8998 msm8953 msm8937 sdm710 sdm845),true)
-  $(warning "Disabling SuiteB-192 support in wpa_supplicant for $(TARGET_BOARD_PLATFORM)")
-  CONFIG_SUITEB192=n
-endif
-
 # To ignore possible wrong network configurations
 L_CFLAGS = -DWPA_IGNORE_CONFIG_ERRORS
-
-ifeq ($(CONFIG_SAE_LOOP_AND_H2E),y)
-L_CFLAGS += -DCONFIG_SAE_LOOP_AND_H2E
-endif
 
 L_CFLAGS += -DVERSION_STR_POSTFIX=\"-$(PLATFORM_VERSION)\"
 
@@ -45,7 +29,7 @@ L_CFLAGS += -DANDROID_LOG_NAME=\"wpa_supplicant\"
 L_CFLAGS += -Wall -Werror
 
 # Keep sometimes uninitialized warnings
-L_CFLAGS += -Wno-error-sometimes-uninitialized
+L_CFLAGS += -Wno-error=sometimes-uninitialized
 
 # Disable incompatible pointer type warnings
 L_CFLAGS += -Wno-incompatible-pointer-types
@@ -56,9 +40,6 @@ L_CFLAGS += -Wno-parentheses-equality
 
 # Disable sign compare warnings
 L_CFLAGS += -Wno-sign-compare
-
-# TODO: move off readdir_r upstream, pull fix back (http://b/72326431).
-L_CFLAGS += -Wno-error-deprecated-declarations
 
 # Disable unused function warnings
 L_CFLAGS += -Wno-unused-function
@@ -86,6 +67,10 @@ endif
 # Disable roaming in wpa_supplicant
 ifdef CONFIG_NO_ROAMING
 L_CFLAGS += -DCONFIG_NO_ROAMING
+endif
+
+ifeq ($(WIFI_PRIV_CMD_UPDATE_MBO_CELL_STATUS), enabled)
+L_CFLAGS += -DENABLE_PRIV_CMD_UPDATE_MBO_CELL_STATUS
 endif
 
 # Use Android specific directory for control interface sockets
@@ -141,6 +126,7 @@ OBJS += notify.c
 OBJS += bss.c
 OBJS += eap_register.c
 OBJS += src/utils/common.c
+OBJS += src/utils/config.c
 OBJS += src/utils/wpa_debug.c
 OBJS += src/utils/wpabuf.c
 OBJS += src/utils/bitfield.c
@@ -263,7 +249,7 @@ L_CFLAGS += -DCONFIG_SUITEB192
 NEED_SHA384=y
 endif
 
-ifeq ($(CONFIG_OCV),y)
+ifdef CONFIG_OCV
 L_CFLAGS += -DCONFIG_OCV
 OBJS += src/common/ocv.c
 endif
@@ -287,6 +273,10 @@ endif
 ifeq ($(CONFIG_SAE),y)
 L_CFLAGS += -DCONFIG_SAE
 OBJS += src/common/sae.c
+ifdef CONFIG_SAE_PK
+L_CFLAGS += -DCONFIG_SAE_PK
+OBJS += src/common/sae_pk.c
+endif
 NEED_ECC=y
 NEED_DH_GROUPS=y
 NEED_HMAC_SHA256_KDF=y
@@ -416,6 +406,17 @@ endif
 ifdef CONFIG_WIFI_DISPLAY
 L_CFLAGS += -DCONFIG_WIFI_DISPLAY
 OBJS += wifi_display.c
+endif
+
+ifdef CONFIG_PASN
+L_CFLAGS += -DCONFIG_PASN
+L_CFLAGS += -DCONFIG_PTKSA_CACHE
+NEED_HMAC_SHA256_KDF=y
+NEED_HMAC_SHA384_KDF=y
+NEED_SHA256=y
+NEED_SHA384=y
+OBJS += src/common/ptksa_cache.c
+OBJS += pasn_supplicant.c
 endif
 
 ifdef CONFIG_HS20
@@ -1531,7 +1532,7 @@ endif
 ifdef CONFIG_CTRL_IFACE_HIDL
 WPA_SUPPLICANT_USE_HIDL=y
 L_CFLAGS += -DCONFIG_HIDL -DCONFIG_CTRL_IFACE_HIDL
-HIDL_INTERFACE_VERSION := 1.3
+HIDL_INTERFACE_VERSION := 1.4
 endif
 
 ifdef CONFIG_SUPPLICANT_VENDOR_HIDL
@@ -1665,6 +1666,12 @@ L_CFLAGS += -DCONFIG_EXT_PASSWORD_TEST
 NEED_EXT_PASSWORD=y
 endif
 
+ifdef CONFIG_EXT_PASSWORD_FILE
+OBJS += src/utils/ext_password_file.c
+L_CFLAGS += -DCONFIG_EXT_PASSWORD_FILE
+NEED_EXT_PASSWORD=y
+endif
+
 ifdef NEED_EXT_PASSWORD
 OBJS += src/utils/ext_password.c
 L_CFLAGS += -DCONFIG_EXT_PASSWORD
@@ -1695,7 +1702,7 @@ endif
 
 OBJS += src/drivers/driver_common.c
 
-OBJS += wpa_supplicant.c events.c blacklist.c wpas_glue.c scan.c
+OBJS += wpa_supplicant.c events.c bssid_ignore.c wpas_glue.c scan.c
 OBJS_t := $(OBJS) $(OBJS_l2) eapol_test.c
 OBJS_t += src/radius/radius_client.c
 OBJS_t += src/radius/radius.c
@@ -1741,6 +1748,9 @@ endif
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := wpa_cli
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-BSD SPDX-license-identifier-BSD-3-Clause SPDX-license-identifier-ISC legacy_unencumbered
+LOCAL_LICENSE_CONDITIONS := notice unencumbered
+LOCAL_NOTICE_FILE := $(LOCAL_PATH)/../COPYING $(LOCAL_PATH)/../NOTICE
 LOCAL_PROPRIETARY_MODULE := true
 LOCAL_SHARED_LIBRARIES := libc libcutils liblog
 LOCAL_CFLAGS := $(L_CFLAGS)
@@ -1751,6 +1761,9 @@ include $(BUILD_EXECUTABLE)
 ########################
 include $(CLEAR_VARS)
 LOCAL_MODULE := wpa_supplicant
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-BSD SPDX-license-identifier-BSD-3-Clause SPDX-license-identifier-ISC legacy_unencumbered
+LOCAL_LICENSE_CONDITIONS := notice unencumbered
+LOCAL_NOTICE_FILE := $(LOCAL_PATH)/../COPYING $(LOCAL_PATH)/../NOTICE
 LOCAL_PROPRIETARY_MODULE := true
 LOCAL_MODULE_RELATIVE_PATH := hw
 ifdef CONFIG_DRIVER_CUSTOM
@@ -1791,6 +1804,7 @@ LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.0
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.1
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.2
 LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.3
+LOCAL_SHARED_LIBRARIES += android.hardware.wifi.supplicant@1.4
 ifeq ($(SUPPLICANT_VENDOR_HIDL), y)
 LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant@2.0
 LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant@2.1
@@ -1798,7 +1812,7 @@ LOCAL_SHARED_LIBRARIES += vendor.qti.hardware.wifi.supplicant@2.2
 endif
 LOCAL_SHARED_LIBRARIES += libhidlbase libutils libbase
 LOCAL_STATIC_LIBRARIES += libwpa_hidl
-LOCAL_VINTF_FRAGMENTS := hidl/$(HIDL_INTERFACE_VERSION)/manifest.xml
+LOCAL_VINTF_FRAGMENTS := hidl/$(HIDL_INTERFACE_VERSION)/android.hardware.wifi.supplicant.xml
 ifeq ($(WIFI_HIDL_UNIFIED_SUPPLICANT_SERVICE_RC_ENTRY), true)
 LOCAL_INIT_RC=hidl/$(HIDL_INTERFACE_VERSION)/android.hardware.wifi.supplicant-service.rc
 endif
@@ -1833,6 +1847,9 @@ include $(BUILD_EXECUTABLE)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE = libwpa_client
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-BSD SPDX-license-identifier-BSD-3-Clause SPDX-license-identifier-ISC legacy_unencumbered
+LOCAL_LICENSE_CONDITIONS := notice unencumbered
+LOCAL_NOTICE_FILE := $(LOCAL_PATH)/../COPYING $(LOCAL_PATH)/../NOTICE
 LOCAL_PROPRIETARY_MODULE := true
 LOCAL_CFLAGS = $(L_CFLAGS)
 LOCAL_SRC_FILES = src/common/wpa_ctrl.c src/utils/os_$(CONFIG_OS).c
@@ -1846,6 +1863,9 @@ ifeq ($(WPA_SUPPLICANT_USE_HIDL), y)
 ########################
 include $(CLEAR_VARS)
 LOCAL_MODULE := libwpa_hidl
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-BSD SPDX-license-identifier-BSD-3-Clause SPDX-license-identifier-ISC legacy_unencumbered
+LOCAL_LICENSE_CONDITIONS := notice unencumbered
+LOCAL_NOTICE_FILE := $(LOCAL_PATH)/../COPYING $(LOCAL_PATH)/../NOTICE
 LOCAL_VENDOR_MODULE := true
 LOCAL_CPPFLAGS := $(L_CPPFLAGS)
 LOCAL_CFLAGS := $(L_CFLAGS)
@@ -1873,6 +1893,7 @@ LOCAL_SHARED_LIBRARIES := \
     android.hardware.wifi.supplicant@1.1 \
     android.hardware.wifi.supplicant@1.2 \
     android.hardware.wifi.supplicant@1.3 \
+    android.hardware.wifi.supplicant@1.4 \
     libbase \
     libhidlbase \
     libutils \

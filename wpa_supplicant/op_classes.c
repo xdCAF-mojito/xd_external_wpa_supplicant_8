@@ -22,10 +22,10 @@ static enum chan_allowed allow_channel(struct hostapd_hw_modes *mode,
 				       unsigned int *flags)
 {
 	int i;
-	int is_6ghz = op_class >= 131 && op_class <= 136;
+	bool is_6ghz = op_class >= 131 && op_class <= 136;
 
 	for (i = 0; i < mode->num_channels; i++) {
-		int chan_is_6ghz;
+		bool chan_is_6ghz;
 
 		chan_is_6ghz = mode->channels[i].freq >= 5935 &&
 			mode->channels[i].freq <= 7115;
@@ -207,11 +207,15 @@ enum chan_allowed verify_channel(struct hostapd_hw_modes *mode, u8 op_class,
 		if (!(flag & HOSTAPD_CHAN_HT40MINUS))
 			return NOT_ALLOWED;
 		res2 = allow_channel(mode, op_class, channel - 4, NULL);
-	} else if (bw == BW40PLUS ||
-		   (bw == BW40 && !(((channel - 1) / 4) % 2))) {
+	} else if (bw == BW40PLUS) {
 		if (!(flag & HOSTAPD_CHAN_HT40PLUS))
 			return NOT_ALLOWED;
 		res2 = allow_channel(mode, op_class, channel + 4, NULL);
+	} else if (is_6ghz_op_class(op_class) && bw == BW40) {
+		if (get_6ghz_sec_channel(channel) < 0)
+			res2 = allow_channel(mode, op_class, channel - 4, NULL);
+		else
+			res2 = allow_channel(mode, op_class, channel + 4, NULL);
 	} else if (bw == BW80) {
 		/*
 		 * channel is a center channel and as such, not necessarily a
@@ -437,12 +441,13 @@ static int wpas_sta_secondary_channel_offset(struct wpa_bss *bss, u8 *current,
 					     u8 *channel)
 {
 
-	u8 *ies, phy_type;
+	const u8 *ies;
+	u8 phy_type;
 	size_t ies_len;
 
 	if (!bss)
 		return -1;
-	ies = (u8 *) (bss + 1);
+	ies = wpa_bss_ie_ptr(bss);
 	ies_len = bss->ie_len ? bss->ie_len : bss->beacon_ie_len;
 	return wpas_get_op_chan_phy(bss->freq, ies, ies_len, current,
 				    channel, &phy_type);
@@ -488,9 +493,13 @@ size_t wpas_supp_op_class_ie(struct wpa_supplicant *wpa_s,
 	}
 
 	*ie_len = wpabuf_len(buf) - 2;
-	if (*ie_len < 2 || wpabuf_len(buf) > len) {
+	if (*ie_len < 2) {
+		wpa_printf(MSG_DEBUG,
+			   "No supported operating classes IE to add");
+		res = 0;
+	} else if (wpabuf_len(buf) > len) {
 		wpa_printf(MSG_ERROR,
-			   "Failed to add supported operating classes IE");
+			   "Supported operating classes IE exceeds maximum buffer length");
 		res = 0;
 	} else {
 		os_memcpy(pos, wpabuf_head(buf), wpabuf_len(buf));
